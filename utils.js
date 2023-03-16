@@ -6,8 +6,8 @@ const generateOptions=(_path)=>{
         hostname: constants.hostname,
         path: _path,
         headers: { 
-            'User-Agent': constants.user_agent
-            //authorization: "token " + process.env.GH_TOKEN
+            'User-Agent': constants.user_agent,
+            authorization: "token " + process.env.GH_TOKEN
         }
         //OAuth: process.env.GH_TOKEN
     }
