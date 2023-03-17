@@ -5,7 +5,6 @@ const { NodeSSH } = require('node-ssh');
 const getFileContent = require('./content');
 var fs = require('fs');
 const sql = require("msnodesqlv8");
-const { Server } = require('http');
 
 async function createPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey) {
     var scriptFile = [];
@@ -61,18 +60,18 @@ async function createPackage(path, changedFiles, rollOutNumber, user, reponame, 
 }
 async function makeUninstallDir(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString) {
     path += '/UNINSTALL_' + rollOutNumber;
-    fs.access(path, (error) => {
+    fs.access(path, async (error) => {
         if (error) {
             fs.mkdir(path, async (error) => {
                 if (error) {
                     console.log(error);
                 } else {
-                    buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString)
+                    await buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString)
                 }
             })
         }
         else {
-            buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString);
+            await buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString);
         }
     });
 
@@ -245,136 +244,125 @@ function generateImportDataScript(changedFiles) {
     const html = scriptFile.join("");
     return html;
 }
-async function generateZipDir(sourceDir, outPath) {
+function generateZipDir(sourceDir, outPath) {   
     const archive = archiver('zip', { zlib: { level: 9 } });
     const stream = fs.createWriteStream(outPath);
 
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
         archive
             .directory(sourceDir, false)
             .on('error', err => reject(err))
             .pipe(stream);
         stream.on('close', () => resolve());
-        await archive.finalize();
+        archive.finalize();
     });
 }
 
 async function deployScript(req, path, serverPath, siteId, envId, rollOut, connectionString, rollType) {
+    generateZipDir(path, path + ".zip");
     const query = "SELECT [site_env_host] as Host ,[site_env_port] as [Port] ,[site_env_username] as Username,[site_env_password] as [Password] FROM [dbo].[site_env_mapping] where site_env_siteid=" + siteId + " and site_env_envid=" + envId;
-    const pool = sql.open(connectionString, function (err, conn) {
-    });
-    console.log(pool.id)
-    if (pool.id > 0) {
-        sql.query(connectionString, query, (err, server) => {
-            if (err) return err;
-            let envPath = '';
-            let envPath1 = '';
-            if (envId == 2) {
-                envPath = 'Prod/';
-                envPath1 = 'Prod\\';
-            }
-            let sftp = new Client();
-            if (server.length > 0) {
-                sftp.connect({
-                    host: server[0].Host,
-                    port: server[0].Port,
-                    username: server[0].Username,
-                    password: server[0].Password
-                }).then(() => {
-                    return sftp.put(path + ".zip", envPath + 'LES/hotfixes/' + rollOut + ".zip");
-                }).then(data => {
-                    const ssh = new NodeSSH()
+    sql.query(connectionString, query, (err, server) => {
+        if (err) return err;
+        let envPath = '';
+        let envPath1 = '';
+        if (envId == 2) {
+            envPath = 'Prod/';
+            envPath1 = 'Prod\\';
+        }
+        let sftp = new Client();
+        if (server.length > 0) {
+            sftp.connect({
+                host: server[0].Host,
+                port: server[0].Port,
+                username: server[0].Username,
+                password: server[0].Password
+            }).then(() => {
+                return sftp.put(path + ".zip", envPath + 'LES/hotfixes/' + rollOut + ".zip");
+            }).then(data => {
+                const ssh = new NodeSSH()
 
-                    var cmds = [
-                        "mkdir " + serverPath,
+                var cmds = [
+                    "mkdir " + serverPath,
+                    "tar -xf " + serverPath + ".zip -C " + serverPath,
+                    envPath1 + "LES\\data\\env",
+                    //"perl "+serverPath+"\\rollout.pl " + rollOut,
+                    "perl " + serverPath + "\\script.pl"
+                ];
+                if (rollType === 'uni') {
+                    cmds = [
                         "tar -xf " + serverPath + ".zip -C " + serverPath,
                         envPath1 + "LES\\data\\env",
-                        //"perl "+serverPath+"\\rollout.pl " + rollOut,
                         "perl " + serverPath + "\\script.pl"
                     ];
-                    if (rollType === 'uni') {
-                        cmds = [
-                            "tar -xf " + serverPath + ".zip -C " + serverPath,
-                            envPath1 + "LES\\data\\env",
-                            "perl " + serverPath + "\\script.pl"
-                        ];
-                    }
-                    ssh.connect({
-                        host: server[0].Host,
-                        username: server[0].Username,
-                        password: server[0].Password
-                    }).then(function () {
-                        cmds.forEach(command => {
-                            ssh.execCommand(command).then(function (result) {
-                                if (result.stderr) {
-                                    getToastAlert(req, 'error', result.stderr);
-                                }
-                                else if (result.stdout) {
-                                    getToastAlert(req, 'success', 'The script rollout process has been completed successfuly.');
-                                }
-                            })
-                        });
-
-                    }).catch(err => {
-                        getToastAlert(req, 'error', err);
-                        return err;
+                }
+                ssh.connect({
+                    host: server[0].Host,
+                    username: server[0].Username,
+                    password: server[0].Password
+                }).then(function () {
+                    cmds.forEach(command => {
+                        ssh.execCommand(command).then(function (result) {
+                            if (result.stderr) {
+                                getToastAlert(req, 'error', result.stderr);
+                            }
+                            else if (result.stdout) {
+                                getToastAlert(req, 'success', 'The script rollout process has been completed successfuly.');
+                            }
+                        })
                     });
-                    getToastAlert(req, 'info', data);
-                    getToastAlert(req, 'success', 'The script rollout process has been completed successfuly.');
+
                 }).catch(err => {
-                    console.log(";ast")
                     getToastAlert(req, 'error', err);
                     return err;
                 });
-            } else {
-                return "SFTP details does not exists for this site."
-            }
+                getToastAlert(req, 'info', data);
+                getToastAlert(req, 'success', 'The script rollout process has been completed successfuly.');
+            }).catch(err => {
+                getToastAlert(req, 'error', err);
+                return err;
+            });
+        } else {
+            return "SFTP details does not exists for this site."
+        }
 
-        })
-        return 'The rollout has been deployed successfuly at Production.';
-    }
-    else {
-        return 'The SFTP server credentials are not set for selected site.';
-    }
+    })
+
 }
 function executeUninstall(req, serverPath, siteId, envId, connectionString, environment) {
     const query = "SELECT [site_env_host] as Host ,[site_env_port] as [Port] ,[site_env_username] as Username,[site_env_password] as [Password] FROM [dbo].[site_env_mapping] where site_env_siteid=" + siteId + " and site_env_envid=" + envId;
-    const pool = sql.open(connectionString, function (err, conn) {
-    });
-    if (pool.id > 0) {
-        sql.query(connectionString, query, (err, server) => {
-            if (err) console.log(err);
-            let envPath = '';
-            if (envId == 2) {
-                envPath = 'Prod\\';
-            }
-            const ssh = new NodeSSH()
-            var cmds = [
-                envPath + "LES\\data\\env",
-                //"perl "+serverPath+"\\rollout.pl " + rollOut,
-                "perl " + serverPath + "\\script.pl"
-            ];
-            ssh.connect({
-                host: server[0].Host,
-                username: server[0].Username,
-                password: server[0].Password
-            }).then(function () {
-                cmds.forEach(command => {
-                    ssh.execCommand(command).then(function (result) {
-                        if (result.stderr) {
-                            getToastAlert(req, 'error', result.stderr);
-                        }
-                        else if (result.stdout) {
-                            getToastAlert(req, 'success', 'The rollback process has been completed successfuly.');
-                        }
-                    })
-                });
-            })
+
+    sql.query(connectionString, query, (err, server) => {
+        if (err) console.log(err);
+        let envPath = '';
+        if (envId == 2) {
+            envPath = 'Prod\\';
+        }
+        const ssh = new NodeSSH()
+        var cmds = [
+            envPath + "LES\\data\\env",
+            //"perl "+serverPath+"\\rollout.pl " + rollOut,
+            "perl " + serverPath + "\\script.pl"
+        ];
+        ssh.connect({
+            host: server[0].Host,
+            username: server[0].Username,
+            password: server[0].Password
+        }).then(function () {
+            cmds.forEach(command => {
+                ssh.execCommand(command).then(function (result) {
+                    if (result.stderr) {
+                        getToastAlert(req, 'error', result.stderr);
+                    }
+                    else if (result.stdout) {
+                        console.log(result.stdout)
+                        getToastAlert(req, 'success', 'The rollback process has been completed successfuly.');
+                    }
+                })
+            });
         })
-        return "The rollout has been uninstall successfuly from " + environment + ".";
-    } else {
-        return "The SFTP credentials are not set for selected site.";
-    }
+    })
+    return "The rollout has been uninstall successfuly from " + environment + ".";
+
 }
 function getToastAlert(req, type, message) {
     if (type === 'error') {

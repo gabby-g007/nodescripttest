@@ -181,7 +181,7 @@ app.post('/rolloutScript', async (req, res) => {
                     console.log(error);
                 } else {
                     if (excType === 'uni') {
-                        makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
+                       makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
                     }
                     else {
                         createPackage(path, changedFiles, rollOut, user, reponame, shaKey);
@@ -216,7 +216,6 @@ function deployRollout(req, path, serverPath, siteId, envId, rollOut, excType) {
     else {
         alert = 'The process of rollout script has been completed successfuly from QA server.';
     }
-    generateZipDir(path, path + ".zip");
     deployScript(req, path, serverPath, siteId, envId, rollOut, connectionString, excType);
     return alert;
 }
