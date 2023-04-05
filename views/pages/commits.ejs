@@ -48,23 +48,23 @@
           <th>Action</th>
         </thead>
         <% for(var i=0; i < respCommit.length; i++) { %>
-          <% if(respCommit[i].commit?.message.toString().includes('UL-TMP')||respCommit[i].commit?.message.toString().includes('COV')){
+          <% if(respCommit[i].comment.toString().includes('UL-TMP')||respCommit[i].comment.toString().includes('COV')){
             %>
             <tr>
               <td>
                 <%= i + 1 %>
               </td>
               <td>
-                <%= respCommit[i].commit?.message %>
+                <%= respCommit[i].comment %>
               </td>
               <td>
-                <%= respCommit[i].commit?.committer?.name %>
+                <%= respCommit[i].committer?.name %>
               </td>
               <td>
-                <%= moment(respCommit[i].commit?.committer?.date).format('DD MMM, YYYY hh:mm A') %>
+                <%= moment(respCommit[i].committer?.date).format('DD MMM, YYYY hh:mm A') %>
               </td>
               <td>
-                <a href="./files?sha=<%= respCommit[i].sha %>&commit=<%= respCommit[i].commit?.message %>"
+                <a href="./files?sha=<%= respCommit[i].commitId %>&commit=<%= respCommit[i].comment %>"
                   class="btn btn-primary">View Files</a>
               </td>
             </tr>

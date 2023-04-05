@@ -2,33 +2,32 @@ const { createNewFile, createSubFolders } = require('./createFiles')
 const archiver = require('archiver');
 const Client = require('ssh2-sftp-client');
 const { NodeSSH } = require('node-ssh');
-const getFileContent = require('./content');
+const { getItemContent } = require('./controllers');
 var fs = require('fs');
 const sql = require("msnodesqlv8");
 var nodemailer = require('nodemailer');
-var exec = require('child_process').exec;
+require('dotenv').config();
 
-async function createPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey) {
+async function createPackage(path, changedFiles, rollOutNumber, shaKey) {
     var scriptFile = [];
     let mbuild = 0;
     scriptFile.push("# Extension ", rollOutNumber, "\n#\n# This script has been built automatically using RolloutBuilder.\n", "# Please check the actions taken by the script as they may not be entirely correct.\n", "# Also check the order of the actions taken if any dependencies might be\n", "# encountered\n", "#\n", "# Replacing files affected by extension.\n");
     scriptFile.push("\n\n")
     if (changedFiles.length > 0) {
         for (const file of changedFiles) {
-            if (file.status !== 'removed') {
-                let offset = file.filename.lastIndexOf('/')
-                let fileName = file.filename.substring(offset + 1);
-                let folderPath = file.filename.substring(0, offset);
+            if (!file.item?.isFolder) {
+                let filePath = file.item.path;
+                let offset = filePath.lastIndexOf('/');
+                let fileName = filePath.substring(offset + 1);
+                let folderPath = filePath.substring(0, offset);
                 if (folderPath.includes('LES')) {
                     folderPath = folderPath.slice(4, folderPath.length);
                 }
-                let filePath = file.filename.replace('LES', 'pkg');
+                let fileNewPath = filePath.replace('/LES', 'pkg');
                 if (!fileName.includes('UNINSTALL_')) {
-                    const content = await getFileContent(user, reponame, shaKey, file.filename);
-
-                    const newFile = await createNewFile(path, content, filePath);
-
-                    scriptFile.push("REPLACE ", filePath, " ", "$LESDIR/" + folderPath, "\n");
+                    const content = await getItemContent(filePath, shaKey);
+                    const newFile = await createNewFile(path, content, fileNewPath);
+                    scriptFile.push("REPLACE ", fileNewPath, " ", "$LESDIR/" + folderPath, "\n");
                     if (fileName.match(/\.(mcmd|mtrg|json|resource|action|jrxml)$/i)) {
                         mbuild++;
                     }
@@ -54,33 +53,32 @@ async function createPackage(path, changedFiles, rollOutNumber, user, reponame, 
         const directoriesInDIrectory = files;
         directoriesInDIrectory.forEach(file => {
             fs.copyFile('common/' + file, path + '/' + file, (err) => {
-                if (err) throw err;
-                //console.log('Files was copied to destination.');
+                if (err) return err;
             });
         })
     });
 }
-async function makeUninstallDir(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString) {
+async function makeUninstallDir(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString) {
     path += '/UNINSTALL_' + rollOutNumber;
     fs.access(path, async (error) => {
         if (error) {
             fs.mkdir(path, async (error) => {
                 if (error) {
-                    console.log(error);
+                    return error;
                 } else {
-                    await buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString)
+                    await buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString)
                 }
             })
         }
         else {
-            await buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString);
+            await buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString);
         }
     });
 
 }
-async function buildUninstallPackage(path, changedFiles, rollOutNumber, user, reponame, shaKey, siteId, envId, connectionString) {
+async function buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString) {
     const query = "SELECT [site_env_host] as Host ,[site_env_port] as [Port] ,[site_env_username] as Username,[site_env_password] as [Password] FROM [dbo].[site_env_mapping] where site_env_siteid=" + siteId + " and site_env_envid=" + envId;
-     sql.query(connectionString, query, async (err, server) => {       
+    sql.query(connectionString, query, async (err, server) => {
         if (err) return err;
         var scriptFile = [];
         let mbuild = 0;
@@ -88,24 +86,25 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, user, re
         scriptFile.push("\n\n")
         if (changedFiles.length > 0) {
             for (const file of changedFiles) {
-                if (file.status !== 'removed') {
-                    let offset = file.filename.lastIndexOf('/')
-                    let fileName = file.filename.substring(offset + 1);
-                    let folderPath = file.filename.substring(0, offset);
+                if (!file.item?.isFolder) {
+                    let filePath = file.item.path;
+                    let offset = filePath.lastIndexOf('/');
+                    let fileName = filePath.substring(offset + 1);
+                    let folderPath = filePath.substring(0, offset);
                     if (folderPath.includes('LES')) {
                         folderPath = folderPath.slice(4, folderPath.length);
                     }
-                    let filePath = file.filename.replace('LES', 'pkg');
+                    let fileNewPath = filePath.replace('/LES', 'pkg');
                     if (fileName.includes('UNINSTALL_')) {
-                        const content = await getFileContent(user, reponame, shaKey, file.filename);
-                        const newFile = await createNewFile(path, content, filePath);
-                        scriptFile.push("REPLACE ", filePath, " ", "$LESDIR/" + folderPath, "\n");
+                        const content = await getItemContent(filePath, shaKey);
+                        const newFile = await createNewFile(path, content, fileNewPath);
+                        scriptFile.push("REPLACE ", fileNewPath, " ", "$LESDIR/" + folderPath, "\n");
                     }
                     else {
                         if (fileName.match(/\.(ctl)$/i)) {
-                            const content = await getFileContent(user, reponame, shaKey, file.filename);
+                            const content = await getItemContent(filePath, shaKey);
                             const newFile = await createNewFile(path, content, filePath);
-                            scriptFile.push("REPLACE ", filePath, " ", "$LESDIR/" + folderPath, "\n");
+                            scriptFile.push("REPLACE ", fileNewPath, " ", "$LESDIR/" + folderPath, "\n");
                         }
                         if (fileName.match(/\.(mcmd|mtrg|json|resource|action|jrxml)$/i)) {
                             let sftp = new Client();
@@ -116,15 +115,15 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, user, re
                                 username: server[0].Username,
                                 password: server[0].Password
                             }).then(() => {
-                                return sftp.get(file.filename);
+                                return sftp.get(filePath);
                             }).then(res => {
-                                createSubFolders(filePath, path);
-                                sftp.get(file.filename, path + '/' + filePath);
+                                createSubFolders(fileNewPath, path);
+                                sftp.get(filePath, path + '/' + fileNewPath);
                                 isAvailable = true;
-                                scriptFile.push("REPLACE ", filePath, " ", "$LESDIR/" + folderPath, "\n");
+                                scriptFile.push("REPLACE ", fileNewPath, " ", "$LESDIR/" + folderPath, "\n");
                             }).catch(err => {
                                 if (!isAvailable) {
-                                    scriptFile.push("REMOVE ", "$LESDIR/" + folderPath + "/" + file.filename, "\n");
+                                    scriptFile.push("REMOVE ", "$LESDIR/" + folderPath + filePath, "\n");
                                 }
                             });
                             mbuild++;
@@ -144,16 +143,15 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, user, re
         const html = scriptFile.join("");
 
         fs.writeFile(path + "/UNINSTALL_" + rollOutNumber, html, function (err) {
-            if (err) throw err;
+            if (err) return err;
             let msg = 'File is created successfully.';
         });
         fs.readdir('common/', (error, files) => {
-            if (error) throw error;
+            if (error) return error;
             const directoriesInDIrectory = files;
             directoriesInDIrectory.forEach(file => {
                 fs.copyFile('common/' + file, path + '/' + file, (err) => {
-                    if (err) throw err;
-                    //console.log('Files was copied to destination.');
+                    if (err) return err;
                 });
             })
         });
@@ -162,17 +160,18 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, user, re
 function generateProcessingScript(changedFiles, rolloutType) {
     let scriptFile = []
     for (const file of changedFiles) {
-        if (file.status !== 'removed') {
-            let offset = file.filename.lastIndexOf('/')
-            let fileName = file.filename.substring(offset + 1);
-            let filePath = file.filename.replace('LES', 'pkg');
+        if (!file.item.isFolder) {
+            let filePath = file.item.path;
+            let offset = filePath.lastIndexOf('/')
+            let fileName = filePath.substring(offset + 1);
+            let fileNewPath = filePath.replace('/LES', 'pkg');
             if (!fileName.includes('UNINSTALL_') && rolloutType === 'ins') {
                 if (fileName.match(/\.(sql|tbl|idx|trg|hdr|prc|pck|seq)$/i)) {
-                    scriptFile.push("RUNSQL ", "$LESDIR/" + filePath, "\n");
+                    scriptFile.push("RUNSQL ", "$LESDIR/" + fileNewPath, "\n");
                 }
             } else if (fileName.includes('UNINSTALL_') && rolloutType === 'uni') {
                 if (fileName.match(/\.(sql|tbl|idx|trg|hdr|prc|pck|seq)$/i)) {
-                    scriptFile.push("RUNSQL ", "$LESDIR/" + filePath, "\n");
+                    scriptFile.push("RUNSQL ", "$LESDIR/" + fileNewPath, "\n");
                 }
             }
         }
@@ -183,25 +182,26 @@ function generateProcessingScript(changedFiles, rolloutType) {
 function generateLoadDataScript(changedFiles, rollType) {
     let scriptFile = []
     for (const file of changedFiles) {
-        if (file.status !== 'removed') {
-            let offset = file.filename.lastIndexOf('/')
-            let fileName = file.filename.substring(offset + 1);
-            let folderPath = file.filename.substring(0, offset);
+        if (!file.item.isFolder) {
+            let filePath = file.item.path;
+            let offset = filePath.lastIndexOf('/')
+            let fileName = filePath.substring(offset + 1);
+            let folderPath = filePath.substring(0, offset);
             if (folderPath.includes('LES')) {
                 folderPath = folderPath.slice(4, folderPath.length);
             }
-            let filePath = file.filename.replace('LES', '$LESDIR');
+            let fileNewPath = filePath.replace('/LES', '$LESDIR');
             if (fileName.match(/\.(csv)$/i)) {
                 if (!fileName.includes('UNINSTALL_') && rollType === 'ins') {
                     let offset = fileName.indexOf('-');
                     if (offset > 0) {
                         let filePrefix = fileName.substring(0, offset);
-                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", filePath, "\n");
+                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", fileNewPath, "\n");
                     }
                     else {
                         let offset = fileName.indexOf('.');
                         let filePrefix = fileName.substring(0, offset);
-                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", filePath, "\n");
+                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", fileNewPath, "\n");
                     }
                 }
                 else if (fileName.includes('UNINSTALL_') && rollType === 'uni') {
@@ -209,12 +209,12 @@ function generateLoadDataScript(changedFiles, rollType) {
                     let offset = fileName.indexOf('-');
                     if (offset > 0) {
                         let filePrefix = fileName.substring(offset1 + 1, offset);
-                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", filePath, "\n");
+                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", fileNewPath, "\n");
                     }
                     else {
                         let offset = fileName.indexOf('.');
                         let filePrefix = fileName.substring(offset1 + 1, offset);
-                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", filePath, "\n");
+                        scriptFile.push("LOADDATA ", '$LESDIR/' + folderPath + "/" + filePrefix + ".ctl", " ", fileNewPath, "\n");
                     }
                 }
 
@@ -227,18 +227,19 @@ function generateLoadDataScript(changedFiles, rollType) {
 function generateImportDataScript(changedFiles) {
     let scriptFile = []
     for (const file of changedFiles) {
-        if (file.status !== 'removed') {
-            let offset = file.filename.lastIndexOf('/')
-            let fileName = file.filename.substring(offset + 1);
-            let filePath = file.filename.replace('LES', 'pkg');
+        if (!file.item.isFolder) {
+            let filePath = file.item.path;
+            let offset = filePath.lastIndexOf('/')
+            let fileName = filePath.substring(offset + 1);
+            let fileNewPath = filePath.replace('/LES', 'pkg');
             if (!fileName.includes('UNINSTALL_')) {
                 if (fileName.match(/\.(slexp)$/i)) {
-                    scriptFile.push("IMPORTSLDATA ", "$LESDIR/" + filePath, "\n");
+                    scriptFile.push("IMPORTSLDATA ", "$LESDIR/" + fileNewPath, "\n");
                 }
             }
             else if (fileName.includes('UNINSTALL_')) {
                 if (fileName.match(/\.(slexp)$/i)) {
-                    scriptFile.push("IMPORTSLDATA ", "$LESDIR/" + filePath, "\n");
+                    scriptFile.push("IMPORTSLDATA ", "$LESDIR/" + fileNewPath, "\n");
                 }
             }
         }
@@ -259,7 +260,6 @@ function generateZipDir(sourceDir, outPath) {
         archive.finalize();
     });
 }
-
 async function deployScript(req, path, serverPath, siteId, envId, rollOut, connectionString, rollType) {
     generateZipDir(path, path + ".zip");
     const query = "SELECT [site_env_host] as Host ,[site_env_port] as [Port] ,[site_env_username] as Username,[site_env_password] as [Password] FROM [dbo].[site_env_mapping] where site_env_siteid=" + siteId + " and site_env_envid=" + envId;
@@ -270,7 +270,7 @@ async function deployScript(req, path, serverPath, siteId, envId, rollOut, conne
         if (envId == 2) {
             envPath = 'Prod/';
             envPath1 = 'Prod\\';
-        } 
+        }
         let sftp = new Client();
         var mailOptions = {
             from: 'appwork.clockdiary@gmail.com',
@@ -324,10 +324,10 @@ async function deployScript(req, path, serverPath, siteId, envId, rollOut, conne
                 getToastAlert(req, 'info', data);
                 getToastAlert(req, 'success', 'The rollout has been deployed successfully.');
                 mailOptions.text = 'The rollout has been deployed successfully.'
-                SendEmail(mailOptions);
+                //SendEmail(mailOptions);
             }).catch(err => {
                 mailOptions.text = 'Some internal error occured.'
-                SendEmail(mailOptions);
+                //SendEmail(mailOptions);
                 getToastAlert(req, 'error', err);
             });
         } else {
@@ -335,13 +335,13 @@ async function deployScript(req, path, serverPath, siteId, envId, rollOut, conne
         }
 
     })
-return 'The rollout has been deployed successfully.';
+    return 'The rollout has been deployed successfully.';
 }
 function executeUninstall(req, serverPath, siteId, envId, connectionString, environment) {
     const query = "SELECT [site_env_host] as Host ,[site_env_port] as [Port] ,[site_env_username] as Username,[site_env_password] as [Password] FROM [dbo].[site_env_mapping] where site_env_siteid=" + siteId + " and site_env_envid=" + envId;
 
     sql.query(connectionString, query, (err, server) => {
-        if (err) console.log(err);
+        if (err) return err;
         let envPath = '';
         if (envId == 2) {
             envPath = 'Prod\\';
@@ -368,7 +368,7 @@ function executeUninstall(req, serverPath, siteId, envId, connectionString, envi
                         return result.stdout;
                     }
                 })
-            });            
+            });
         })
     })
     return "The rollout has been uninstall successfully from " + environment + ".";
@@ -387,11 +387,11 @@ function getToastAlert(req, type, message) {
 }
 function SendEmail(mailOptions) {
     var transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
+        host: process.env.HOST,
+        port: process.env.EMAIL_PORT,
         auth: {
-            user: "appwork.clockdiary@gmail.com",
-            pass: "obktjcrdthskprpn"
+            user: process.env.USERNAME,
+            pass: process.env.PASSWORD
         }
     });
 
@@ -403,4 +403,5 @@ function SendEmail(mailOptions) {
         }
     });
 }
+
 module.exports = { createPackage, makeUninstallDir, generateZipDir, deployScript, executeUninstall, getToastAlert }

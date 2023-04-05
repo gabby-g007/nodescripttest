@@ -10,7 +10,7 @@ async function createNewFile(path, content, fileName) {
             // then create it
             fs.mkdir(path, (error) => {
                 if (error) {
-                    console.log(error);
+                    return error;
                 } else {
                     createSubFolders(fileName, path)
                     createFile(path, fileName, content)
@@ -37,9 +37,9 @@ function createSubFolders(fileName, path) {
 }
 function createFile(path, fileName, content) {
     let msg = '';
-    // appendFile function with filename, content and callback function
+    //appendFile function with filename, content and callback function
     fs.writeFile(path + '/' + fileName, content, async function (err) {
-        if (err) throw err;
+        if (err) return err;
         msg = 'File is created successfully.';
     });
 

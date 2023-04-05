@@ -1,55 +1,35 @@
 const { generateOptions } = require('../utils');
 const https = require('https');
-const fetch = require('node-fetch');
+require('dotenv').config();
+var axios = require('axios');
 
-function getAllRepo(user) {
-    const options = generateOptions('/users/' + user + '/repos')
-    return new Promise((resolve) => {
-        let data = ''
-        https.get(options, res => {
-            res.on('data', chunk => { data += chunk })
-            res.on('end', () => {
-                resolve(JSON.parse(data));
-            })
-        })
-    })
-}
+let organization = process.env.ORG;
+let project = process.env.PROJECT;
+let repoId = process.env.REPO_ID;
 
-function getBranchesLists(user, reponame) {
-    const options = generateOptions('/repos/' + user + '/' + reponame + '/branches')
-    return new Promise((resolve) => {
-        let data = ''
-        https.get(options, res => {
-            res.on('data', chunk => { data += chunk })
-            res.on('end', () => {
-                resolve(JSON.parse(data));
-            })
-        })
-    })
+async function getBranchesLists() {
+    const options = generateOptions(`${organization}/${project}/_apis/git/repositories/${repoId}/stats/branches?api-version=7.0`)
+    headers = options.headers;
+    const response = await axios.get(options.hostname + options.path, { headers });
+    return response.data.value;
 }
-function getAllCommits(user, reponame, branch) {
-    const options = generateOptions('/repos/' + user + '/' + reponame + '/commits?sha=' + branch)
-    return new Promise((resolve) => {
-        let data = ''
-        https.get(options, res => {
-            res.on('data', chunk => { data += chunk })
-            res.on('end', () => {
-                resolve(JSON.parse(data));
-            })
-        })
-    })
+async function getAllCommits() {
+    const options = generateOptions(`${organization}/${project}/_apis/git/repositories/${repoId}/commits`)
+    headers = options.headers;
+    const response = await axios.get(options.hostname + options.path, { headers });
+    return response.data.value;
 }
-function getAllFiles(user, reponame, shaKey) {
-    const options = generateOptions('/repos/' + user + '/' + reponame + '/commits/' + shaKey)
-    return new Promise((resolve) => {
-        let data = ''
-        https.get(options, res => {
-            res.on('data', chunk => { data += chunk })
-            res.on('end', () => {
-                resolve(JSON.parse(data));
-            })
-        })
-    })
+async function getAllFiles(commitId) {
+    const options = generateOptions(`${organization}/${project}/_apis/git/repositories/${repoId}/commits/${commitId}/changes`)
+    headers = options.headers;
+    const response = await axios.get(options.hostname + options.path, { headers });
+    return response.data.changes;
 }
-
-module.exports = { getAllRepo, getBranchesLists, getAllCommits, getAllFiles }
+async function getItemContent(filePath, commitId) {
+    const options = generateOptions(`${organization}/${project}/_apis/sourceProviders/tfsgit/filecontents?&repository=${repoId}&commitOrBranch=${commitId}&path=${filePath}&api-version=7.0`);
+    headers = options.headers;
+    const response = await axios.get(options.hostname + options.path, { headers });
+    
+    return response.data;
+}
+module.exports = { getBranchesLists, getAllCommits, getAllFiles, getItemContent }

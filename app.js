@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const middlewares = require('./middlewares');
-const routes = require('./routes');
 const { getBranchesLists, getAllFiles, getAllCommits } = require('./controllers/controllers');
 const getFileContent = require('./controllers/content');
 const { createNewFile } = require('./controllers/createFiles')
@@ -17,7 +16,6 @@ var cookieParser = require('cookie-parser')
     // express-toastr
     , toastr = require('express-toastr');
 const connectionString = "server=DESKTOP-KUVG2Q9;Database=WMSAutomation;Trusted_Connection=Yes;Driver={SQL Server Native Client 11.0}";
-const http =require('http');
 
 let branch = '';
 let shaKey = '';
@@ -35,7 +33,6 @@ app.use(express.static('public'));
 app.use(express.static('controllers'));
 app.use(cors());
 app.use(middlewares.setHeaders);
-app.use('/github_api', routes);
 app.use(cookieParser('secret'));
 app.use(session({
     secret: 'secret',
@@ -47,20 +44,13 @@ app.use(flash());
 app.use(toastr());
 
 app.get('/', async (req, res) => {
-
-    const branchList = await getBranchesLists(user, reponame)
+    const branchList = await getBranchesLists();
     res.render('pages/home', { response: branchList, req: req });
 })
 
-app.post('/branches', async (req, res) => {
-    reponame = req.body.repo;
-    const branchList = await getBranchesLists(user, reponame)
-    res.render('pages/branches', { response: branchList });
-})
 app.get('/commits', async (req, res) => {
-    branch = req.query.branch
-    const response1 = await getAllCommits(user, reponame, branch)
-    res.render('pages/commits', { respCommit: response1, moment: moment });
+    const commits = await getAllCommits();
+    res.render('pages/commits', { respCommit: commits, moment: moment });
 })
 app.get('/files', async (req, res) => {
     shaKey = req.query.sha
@@ -69,7 +59,7 @@ app.get('/files', async (req, res) => {
     if (offset > 0) {
         rollOut = rollOut.substring(offset + 1, rollOut.length)
     }
-    const allFiles = await getAllFiles(user, reponame, shaKey)
+    const allFiles = await getAllFiles(shaKey);
     res.render('pages/files', { changedFiles: allFiles, message: '' });
 })
 app.get('/createFile', async (req, res) => {
@@ -79,8 +69,7 @@ app.get('/createFile', async (req, res) => {
     res.render('pages/createFile', { content: newFile });
 })
 app.post('/deployRollout', async function (req, res) {
-    const allFiles = await getAllFiles(user, reponame, shaKey)
-    const changedFiles = allFiles.files;
+    const changedFiles = await getAllFiles(shaKey)
     let siteId = 1;
     let envId = 1;
     //const query = "select top 1 rollout_name from rollout_master where rollout_name='" + rollOut + "'";
@@ -88,29 +77,29 @@ app.post('/deployRollout', async function (req, res) {
     //if (rows.length <= 0) {
     // const rolloutQuery = "insert into rollout_master (rollout_name) values('" + rollOut + "')";
     //sql.query(connectionString, rolloutQuery, (err, response) => {
-    //   if (err) console.log('error : ', err);
+    //   if (err) return err;
     let path = 'hotfixes/' + rollOut;
     fs.access(path, (error) => {
         if (error) {
             fs.mkdir(path, async (error) => {
                 if (error) {
-                    console.log(error);
+                    return error;
                 } else {
-                    createPackage(path, changedFiles, rollOut, user, reponame, shaKey);
-                    makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString)
+                    createPackage(path, changedFiles, rollOut, shaKey);
+                    makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString)
                 }
             })
         }
         else {
-            createPackage(path, changedFiles, rollOut, user, reponame, shaKey);
-            makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
+            createPackage(path, changedFiles, rollOut, shaKey);
+            makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
         }
     });
 
     getToastAlert(req, 'success', "The rollout has been created.");
-     const query = "select site_id as id,site_name as name from site_master";
-     sql.query(connectionString, query, async (err, siteList) => {
-         if (err) console.log(err);
+    const query = "select site_id as id,site_name as name from site_master";
+    sql.query(connectionString, query, async (err, siteList) => {
+        if (err) return err;
         res.render('pages/deployRollout', { siteList: siteList, req: req });
     });
 
@@ -120,7 +109,7 @@ app.post('/deployRollout', async function (req, res) {
     //     getToastAlert(req, 'success', "The rollout is already created.");
     //     const query = "select site_id as id,site_name as name from site_master";
     //     sql.query(connectionString, query, (err, siteList) => {
-    //         if (err) console.log(err);
+    //         if (err) return err;
     //         res.render('pages/deployRollout', { siteList: siteList, req: req });
     //     });
     // }
@@ -139,26 +128,23 @@ app.post('/deploy', async function (req, res) {
 
     }
     deployScript(req, path, serverPath, siteId, envId, rollOut, connectionString, execType);
-    //res.redirect('/')
-    const branchList = await getBranchesLists(user, reponame)
+    const branchList = await getBranchesLists()
     res.render('pages/home', { response: branchList, req: req });
 });
 
 app.get('/environment/:id', (req, res) => {
     const query = "SELECT [site_env_envid] as id, [env_name] as [name]  FROM [dbo].[site_env_mapping],env_master where site_env_siteid=" + req.params.id + " and env_id=site_env_envid";
-     sql.query(connectionString, query, (err, rows) => {
-         res.json(rows);
+    sql.query(connectionString, query, (err, rows) => {
+        res.json(rows);
     });
 });
 app.post('/rolloutScript', async (req, res) => {
-    //branch = req.query.branch
-    let branch = req.body.branch;
     let siteId = req.body.siteId;
     let envId = req.body.envId;
     let excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
-    const response1 = await getAllCommits(user, reponame, branch)
-    shaKey = response1[0].sha
-    rollOut = response1[0].commit.message;
+    const response1 = await getAllCommits()
+    shaKey = response1[0].commitId
+    rollOut = response1[0].comment;
     let offset = rollOut.indexOf('_')
     if (offset > 0) {
         rollOut = rollOut.substring(offset + 1, rollOut.length);
@@ -169,33 +155,32 @@ app.post('/rolloutScript', async (req, res) => {
         /* execute on INSTALL Rollout */
         excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
     }
-    const allFiles = await getAllFiles(user, reponame, shaKey)
-    const changedFiles = allFiles.files;
+    const changedFiles = await getAllFiles(shaKey);
     let path = 'hotfixes/' + rollOut;
     let serverPath = 'LES\\hotfixes\\' + rollOut;
     fs.access(path, (error) => {
         if (error) {
             fs.mkdir(path, (error) => {
                 if (error) {
-                    console.log(error);
+                    return error;
                 } else {
                     if (excType === 'uni') {
-                        makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
+                        makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
                     }
                     else {
-                        createPackage(path, changedFiles, rollOut, user, reponame, shaKey);
-                        makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
+                        createPackage(path, changedFiles, rollOut,  shaKey);
+                        makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
                     }
                 }
             })
         }
         else {
             if (excType === 'uni') {
-                makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
+                makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
             }
             else {
-                createPackage(path, changedFiles, rollOut, user, reponame, shaKey);
-                makeUninstallDir(path, changedFiles, rollOut, user, reponame, shaKey, siteId, envId, connectionString);
+                createPackage(path, changedFiles, rollOut, shaKey);
+                makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
             }
         }
     });
@@ -233,7 +218,6 @@ app.post('/uninstallRollout', async (req, res) => {
 
     fs.readdir(path, (err, files) => {
         if (err) {
-            console.log(err)
             res.json("The rollout name does not exists at " + environment + ".");
         }
         else {
@@ -255,7 +239,7 @@ app.post('/productionRollout', async (req, res) => {
         }
         else {
             let resp = deployScript(req, path, serverPath, siteId, envId, rolloutName, connectionString, 'ins');
-            res.json(resp);
+            res.json('The rollout has been deployed successfully.');
         }
     })
 
