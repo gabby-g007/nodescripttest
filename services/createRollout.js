@@ -1,8 +1,8 @@
-const { createNewFile, createSubFolders } = require('./createFiles')
+const { createNewFile, createSubFolders } = require('../controllers/createFiles')
 const archiver = require('archiver');
 const Client = require('ssh2-sftp-client');
 const { NodeSSH } = require('node-ssh');
-const { getItemContent, resetCommit } = require('./controllers');
+const { getItemContent, resetCommit } = require('../services/wmsService');
 var fs = require('fs');
 const sql = require("msnodesqlv8");
 var nodemailer = require('nodemailer');
@@ -60,18 +60,18 @@ async function createPackage(path, changedFiles, rollOutNumber, shaKey) {
 }
 async function makeUninstallDir(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString) {
     path += '/UNINSTALL_' + rollOutNumber;
-    fs.access(path, async (error) => {
+    fs.access(path, (error) => {
         if (error) {
-            fs.mkdir(path, async (error) => {
+            fs.mkdir(path, (error) => {
                 if (error) {
                     return error;
                 } else {
-                    await buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString)
+                    buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString)
                 }
             })
         }
         else {
-            await buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString);
+            buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, siteId, envId, connectionString);
         }
     });
 
