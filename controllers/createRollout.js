@@ -2,7 +2,7 @@ const { createNewFile, createSubFolders } = require('./createFiles')
 const archiver = require('archiver');
 const Client = require('ssh2-sftp-client');
 const { NodeSSH } = require('node-ssh');
-const { getItemContent } = require('./controllers');
+const { getItemContent, resetCommit } = require('./controllers');
 var fs = require('fs');
 const sql = require("msnodesqlv8");
 var nodemailer = require('nodemailer');
@@ -21,7 +21,7 @@ async function createPackage(path, changedFiles, rollOutNumber, shaKey) {
                 let fileName = filePath.substring(offset + 1);
                 let folderPath = filePath.substring(0, offset);
                 if (folderPath.includes('LES')) {
-                    folderPath = folderPath.slice(4, folderPath.length);
+                    folderPath = folderPath.slice(5, folderPath.length);
                 }
                 let fileNewPath = filePath.replace('/LES', 'pkg');
                 if (!fileName.includes('UNINSTALL_')) {
@@ -92,7 +92,7 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, 
                     let fileName = filePath.substring(offset + 1);
                     let folderPath = filePath.substring(0, offset);
                     if (folderPath.includes('LES')) {
-                        folderPath = folderPath.slice(4, folderPath.length);
+                        folderPath = folderPath.slice(5, folderPath.length);
                     }
                     let fileNewPath = filePath.replace('/LES', 'pkg');
                     if (fileName.includes('UNINSTALL_')) {
@@ -103,7 +103,7 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, 
                     else {
                         if (fileName.match(/\.(ctl)$/i)) {
                             const content = await getItemContent(filePath, shaKey);
-                            const newFile = await createNewFile(path, content, filePath);
+                            const newFile = await createNewFile(path, content, fileNewPath);
                             scriptFile.push("REPLACE ", fileNewPath, " ", "$LESDIR/" + folderPath, "\n");
                         }
                         if (fileName.match(/\.(mcmd|mtrg|json|resource|action|jrxml)$/i)) {
@@ -123,7 +123,7 @@ async function buildUninstallPackage(path, changedFiles, rollOutNumber, shaKey, 
                                 scriptFile.push("REPLACE ", fileNewPath, " ", "$LESDIR/" + folderPath, "\n");
                             }).catch(err => {
                                 if (!isAvailable) {
-                                    scriptFile.push("REMOVE ", "$LESDIR/" + folderPath + filePath, "\n");
+                                    scriptFile.push("REMOVE ", "$LESDIR/" + folderPath +'/'+ fileName, "\n");
                                 }
                             });
                             mbuild++;
@@ -273,7 +273,7 @@ async function deployScript(req, path, serverPath, siteId, envId, rollOut, conne
         }
         let sftp = new Client();
         var mailOptions = {
-            from: 'appwork.clockdiary@gmail.com',
+            from: 'appwork@gmail.com',
             to: 'gabby.g@appwrk.com',
             subject: 'Rollout Process Status'
         };
@@ -337,10 +337,10 @@ async function deployScript(req, path, serverPath, siteId, envId, rollOut, conne
     })
     return 'The rollout has been deployed successfully.';
 }
-function executeUninstall(req, serverPath, siteId, envId, connectionString, environment) {
+async function executeUninstall(req, serverPath, siteId, envId, connectionString, environment, commitId, branch, rollOut) {
     const query = "SELECT [site_env_host] as Host ,[site_env_port] as [Port] ,[site_env_username] as Username,[site_env_password] as [Password] FROM [dbo].[site_env_mapping] where site_env_siteid=" + siteId + " and site_env_envid=" + envId;
 
-    sql.query(connectionString, query, (err, server) => {
+    sql.query(connectionString, query, async (err, server) => {
         if (err) return err;
         let envPath = '';
         if (envId == 2) {
@@ -356,16 +356,15 @@ function executeUninstall(req, serverPath, siteId, envId, connectionString, envi
             host: server[0].Host,
             username: server[0].Username,
             password: server[0].Password
-        }).then(function () {
+        }).then(async function () {
             cmds.forEach(command => {
-                ssh.execCommand(command).then(function (result) {
+                ssh.execCommand(command).then(async function (result) {
                     if (result.stderr) {
                         getToastAlert(req, 'error', result.stderr);
-                        return result.stderr;
                     }
-                    else if (result.stdout) {
+                    else if (result.stdout) {       
+                        const resp = await resetCommit(commitId, branch, rollOut);                
                         getToastAlert(req, 'success', "The rollout has been uninstall successfully from " + environment + ".");
-                        return result.stdout;
                     }
                 })
             });
@@ -387,11 +386,11 @@ function getToastAlert(req, type, message) {
 }
 function SendEmail(mailOptions) {
     var transporter = nodemailer.createTransport({
-        host: process.env.HOST,
+        host: process.env.EMAIL_HOST,
         port: process.env.EMAIL_PORT,
         auth: {
-            user: process.env.USERNAME,
-            pass: process.env.PASSWORD
+            user: process.env.EMAIL_USERNAME,
+            pass: process.env.EMAIL_PASSWORD
         }
     });
 

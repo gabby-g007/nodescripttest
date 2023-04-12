@@ -20,9 +20,6 @@ const connectionString = "server=DESKTOP-KUVG2Q9;Database=WMSAutomation;Trusted_
 let branch = '';
 let shaKey = '';
 let rollOut = '';
-const user = 'gabby-g007';//req.params.user;
-const reponame = 'WMS' //req.params.reponame;
-const siteList = [];
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -49,7 +46,8 @@ app.get('/', async (req, res) => {
 })
 
 app.get('/commits', async (req, res) => {
-    const commits = await getAllCommits();
+    let branch = req.query.branch;
+    const commits = await getAllCommits(branch);
     res.render('pages/commits', { respCommit: commits, moment: moment });
 })
 app.get('/files', async (req, res) => {
@@ -139,55 +137,58 @@ app.get('/environment/:id', (req, res) => {
     });
 });
 app.post('/rolloutScript', async (req, res) => {
+    let branch = req.body.branch;
     let siteId = req.body.siteId;
     let envId = req.body.envId;
     let excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
-    const response1 = await getAllCommits()
+    const response1 = await getAllCommits(branch);
     shaKey = response1[0].commitId
     rollOut = response1[0].comment;
-    let offset = rollOut.indexOf('_')
-    if (offset > 0) {
-        rollOut = rollOut.substring(offset + 1, rollOut.length);
-        /* execute on UNINSTALL Rollout */
-        excType = 'uni'; /* 'uni' goes to UNINSTALL/ROLLBACK */
-    }
-    else {
-        /* execute on INSTALL Rollout */
-        excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
-    }
-    const changedFiles = await getAllFiles(shaKey);
-    let path = 'hotfixes/' + rollOut;
-    let serverPath = 'LES\\hotfixes\\' + rollOut;
-    fs.access(path, (error) => {
-        if (error) {
-            fs.mkdir(path, (error) => {
-                if (error) {
-                    return error;
-                } else {
-                    if (excType === 'uni') {
-                        makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
-                    }
-                    else {
-                        createPackage(path, changedFiles, rollOut,  shaKey);
-                        makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
-                    }
-                }
-            })
+    if (rollOut.startsWith('COV')) {
+        let offset = rollOut.indexOf('_')
+        if (offset > 0) {
+            rollOut = rollOut.substring(offset + 1, rollOut.length);
+            /* execute on UNINSTALL Rollout */
+            excType = 'uni'; /* 'uni' goes to UNINSTALL/ROLLBACK */
         }
         else {
-            if (excType === 'uni') {
-                makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+            /* execute on INSTALL Rollout */
+            excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
+        }
+        const changedFiles = await getAllFiles(shaKey);
+        let path = 'hotfixes/' + rollOut;
+        let serverPath = 'LES\\hotfixes\\' + rollOut;
+        fs.access(path, (error) => {
+            if (error) {
+                fs.mkdir(path, (error) => {
+                    if (error) {
+                        return error;
+                    } else {
+                        if (excType === 'uni') {
+                            makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+                        }
+                        else {
+                            createPackage(path, changedFiles, rollOut, shaKey);
+                            makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+                        }
+                    }
+                })
             }
             else {
-                createPackage(path, changedFiles, rollOut, shaKey);
-                makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+                if (excType === 'uni') {
+                    makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+                }
+                else {
+                    createPackage(path, changedFiles, rollOut, shaKey);
+                    makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+                }
             }
-        }
-    });
+        });
 
-    setTimeout(() => {
-        res.json(deployRollout(req, path, serverPath, siteId, envId, rollOut, excType));
-    }, 3000);
+        setTimeout(() => {
+            res.json(deployRollout(req, path, serverPath, siteId, envId, rollOut, excType));
+        }, 3000);
+    }
 })
 
 function deployRollout(req, path, serverPath, siteId, envId, rollOut, excType) {
@@ -207,6 +208,9 @@ app.post('/uninstallRollout', async (req, res) => {
     let rollOut = req.body.rollout;
     let siteId = req.body.siteId;
     let envId = req.body.envId;
+    let branch = req.body.branch;
+    const response1 = await getAllCommits(branch);
+    shaKey = response1[0].commitId;
     let envPath = '';
     let environment = 'QA Server';
     if (envId == 2) {
@@ -216,12 +220,12 @@ app.post('/uninstallRollout', async (req, res) => {
     let path = 'hotfixes/' + rollOut + '/UNINSTALL_' + rollOut;
     let serverPath = envPath + 'LES\\hotfixes\\' + rollOut + '\\UNINSTALL_' + rollOut;
 
-    fs.readdir(path, (err, files) => {
+    fs.readdir(path, async (err, files) => {
         if (err) {
             res.json("The rollout name does not exists at " + environment + ".");
         }
         else {
-            let resp = executeUninstall(req, serverPath, siteId, envId, connectionString, environment);
+            let resp = await executeUninstall(req, serverPath, siteId, envId, connectionString, environment, shaKey, branch, rollOut);
             res.json(resp);
         }
     })

@@ -48,7 +48,7 @@
           <th>Action</th>
         </thead>
         <% for(var i=0; i < respCommit.length; i++) { %>
-          <% if(respCommit[i].comment.toString().includes('UL-TMP')||respCommit[i].comment.toString().includes('COV')){
+          <% if(respCommit[i].comment.toString().startsWith('UL')||respCommit[i].comment.toString().startsWith('COV')){
             %>
             <tr>
               <td>
