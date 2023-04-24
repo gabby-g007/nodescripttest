@@ -47,7 +47,7 @@
           <th>Date</th>
           <th>Action</th>
         </thead>
-        <% for(var i=0; i < respCommit.length; i++) { %>
+        <% for(let i=0; i < respCommit.length; i++) { %>
           <% if(respCommit[i].comment.toString().startsWith('UL')||respCommit[i].comment.toString().startsWith('COV')){
             %>
             <tr>

@@ -1,15 +1,9 @@
 const { generateOptions } = require('../utils');
-const https = require('https');
 require('dotenv').config();
-var axios = require('axios');
-
+let axios = require('axios');
 let organization = process.env.ORG;
 let project = process.env.PROJECT;
 let repoId = process.env.REPO_ID;
-let repositoryName = process.env.REPO_NAME;
-let branches = process.env.BRANCH_NAME;
-const token = process.env.AZURE_TOKEN;
-
 
 async function getBranchesList() {
     const options = generateOptions(`${organization}/${project}/_apis/git/repositories/${repoId}/stats/branches?api-version=7.0`)
@@ -18,7 +12,7 @@ async function getBranchesList() {
     return response.data.value;
 }
 async function getAllCommit(branch) {
-    const options = generateOptions(`${organization}/${project}/_apis/git/repositories/${repoId}/commits?searchCriteria.itemVersion.version=${branch}&api-version=7.0`)
+    const options = generateOptions(`${organization}/${project}/_apis/git/repositories/${repoId}/commits?searchCriteria.itemVersion.version=${branch}&api-version=7.0`);
     const headers = options.headers;
     const response = await axios.get(options.hostname, { headers });
     return response.data.value;
@@ -107,17 +101,5 @@ function comletePullRequest(pullRequestId, lastMergeSourceCommit, rollOut) {
         console.error(error);
     });
 }
-function deployRollout(req, path, serverPath, siteId, envId, rollOut, excType) {
-    let alert = '';
 
-    if (excType === 'uni') {
-        serverPath = 'LES\\hotfixes\\' + rollOut + '\\UNINSTALL_' + rollOut;
-        alert = 'The rollout script has been uninstall successfuly from QA server.';
-    }
-    else {
-        alert = 'The process of rollout script has been completed successfuly from QA server.';
-    }
-    deployScript(req, path, serverPath, siteId, envId, rollOut, connectionString, excType);
-    return alert;
-}
-module.exports = { getBranchesList, getAllCommit, getAllFile, getItemContent, resetCommit, deployRollout }
+module.exports = { getBranchesList, getAllCommit, getAllFile, getItemContent, resetCommit }

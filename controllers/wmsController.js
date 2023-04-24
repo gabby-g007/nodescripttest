@@ -1,15 +1,14 @@
-var fs = require('fs');
+let fs = require('fs');
 const sql = require("msnodesqlv8");
 const moment = require('moment');
 const { createPackage, makeUninstallDir, generateZipDir, deployScript, executeUninstall, getToastAlert } = require('../services/createRollout')
-const { getBranchesList, getAllFile, getAllCommit, deployRollout } = require('../services/wmsService');
+const { getBranchesList, getAllFile, getAllCommit } = require('../services/wmsService');
 
 const connectionString = "server=DESKTOP-KUVG2Q9;Database=WMSAutomation;Trusted_Connection=Yes;Driver={SQL Server Native Client 11.0}";
 
-let branch = '';
 let shaKey = '';
 let rollOut = '';
-
+let mainDir = 'LES';
 async function getBranchesLists(req, res) {
     const branchList = await getBranchesList();
     res.render('pages/home', { response: branchList, req: req });
@@ -32,7 +31,7 @@ async function getAllFiles(req, res) {
 async function createRollout(req, res) {
     const changedFiles = await getAllFile(shaKey)
     let siteId = 1;
-    let envId = 1;
+    let envId = 2;
     //const query = "select top 1 rollout_name from rollout_master where rollout_name='" + rollOut + "'";
     //sql.query(connectionString, query, (err, rows) => {
     //if (rows.length <= 0) {
@@ -46,14 +45,14 @@ async function createRollout(req, res) {
                 if (error) {
                     return error;
                 } else {
-                    createPackage(path, changedFiles, rollOut, shaKey);
-                    makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString)
+                    mainDir = createPackage(path, changedFiles, rollOut, shaKey);
+                    makeUninstallDir({path, changedFiles, rollOut, shaKey, siteId, envId})
                 }
             })
         }
         else {
-            createPackage(path, changedFiles, rollOut, shaKey);
-            makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
+            mainDir = createPackage(path, changedFiles, rollOut, shaKey);
+            makeUninstallDir({path, changedFiles, rollOut, shaKey, siteId, envId});
         }
     });
 
@@ -76,19 +75,18 @@ async function createRollout(req, res) {
     // }
     //});
 }
-async function deployToProduction(req, res) {
+async function rolloutDeployment(req, res) {
     let siteId = req.body.site;
     let envId = req.body.environment;
     let execType = req.query.button;
     //zip the folder to the server 
     let path = 'hotfixes/' + rollOut;
-    let serverPath = 'LES\\hotfixes\\' + rollOut;
+    let serverPath = '\\hotfixes\\' + rollOut;
     generateZipDir(path, path + ".zip")
     if (execType === 'uni') {
-        serverPath = 'LES\\hotfixes\\' + rollOut + '\\UNINSTALL_' + rollOut;
-
+        serverPath = '\\hotfixes\\' + rollOut + '\\UNINSTALL_' + rollOut;
     }
-    deployScript(req, path, serverPath, siteId, envId, rollOut, connectionString, execType);
+    deployScript({req, path, mainDir, serverPath, siteId, envId, rollOut});
     const branchList = await getBranchesList()
     res.render('pages/home', { response: branchList, req: req });
 }
@@ -102,59 +100,44 @@ async function rolloutScript(req, res) {
     let branch = req.body.branch;
     let siteId = req.body.siteId;
     let envId = req.body.envId;
-    let excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
     const response1 = await getAllCommit(branch);
     shaKey = response1[0].commitId
     rollOut = response1[0].comment;
-    if (rollOut.startsWith('COV')) {
-        console.log({rollOut})
+    if (rollOut.startsWith('COV') || rollOut.startsWith('UL') || rollOut.startsWith('UNINSTALL_')) {
         let offset = rollOut.indexOf('_')
         if (offset > 0) {
             rollOut = rollOut.substring(offset + 1, rollOut.length);
-            /* execute on UNINSTALL Rollout */
-            excType = 'uni'; /* 'uni' goes to UNINSTALL/ROLLBACK */
-        }
-        else {
-            /* execute on INSTALL Rollout */
-            excType = 'ins'; /* 'ins' goes to INSTALL/ROLLOUT */
         }
         const changedFiles = await getAllFile(shaKey);
         let path = 'hotfixes/' + rollOut;
-        let serverPath = 'LES\\hotfixes\\' + rollOut;
-        fs.access(path, (error) => {
+        
+        fs.access(path, async (error) => {
             if (error) {
-                fs.mkdir(path, (error) => {
+                fs.mkdir(path, async (error) => {
                     if (error) {
                         return error;
                     } else {
-                        if (excType === 'uni') {
-                            makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
-                        }
-                        else {
-                            createPackage(path, changedFiles, rollOut, shaKey);
-                            makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
-                        }
+                        mainDir = await createPackage(path, changedFiles, rollOut, shaKey);
+                        await makeUninstallDir({req, path, changedFiles, rollOut, shaKey, siteId, envId});
+                        // setTimeout(async () => {
+                        //     res.json(await deployScript({req, path, mainDir, serverPath, siteId, envId, rollOut}));
+                        // }, 10000);
+                        res.json('The Rollout has been deployed successfully');
                     }
                 })
             }
             else {
-                if (excType === 'uni') {
-                    makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
-                }
-                else {
-                    createPackage(path, changedFiles, rollOut, shaKey);
-                    makeUninstallDir(path, changedFiles, rollOut, shaKey, siteId, envId, connectionString);
-                }
+                mainDir = await createPackage(path, changedFiles, rollOut, shaKey);
+                await makeUninstallDir({req, path, changedFiles, rollOut, shaKey, siteId, envId});
+                // setTimeout(async () => {
+                //     res.json(await deployScript({req, path, mainDir, serverPath, siteId, envId, rollOut}));
+                // }, 10000);
+                res.json('The Rollout has been deployed successfully');
             }
         });
 
-        // setTimeout(() => {
-            res.json(deployRollout(req, path, serverPath, siteId, envId, rollOut, excType));
-        // }, 3000);
-        
     }
-    else
-    {
+    else {
         res.json("Rollout name format is not valid. so you cann't create rollout.")
     }
 }
@@ -163,43 +146,63 @@ async function uninstallRollout(req, res) {
     let siteId = req.body.siteId;
     let envId = req.body.envId;
     let branch = req.body.branch;
-    const response1 = await getAllCommit(branch);
-    shaKey = response1[0].commitId;
-    let envPath = '';
-    let environment = 'QA Server';
-    if (envId == 2) {
-        envPath = 'Prod\\';
-        environment = 'Production';
-    }
-    let path = 'hotfixes/' + rollOut + '/UNINSTALL_' + rollOut;
-    let serverPath = envPath + 'LES\\hotfixes\\' + rollOut + '\\UNINSTALL_' + rollOut;
+    const allCommits = await getAllCommit(branch);
 
-    fs.readdir(path, async (err, files) => {
-        if (err) {
-            res.json("The rollout name does not exists at " + environment + ".");
+    allCommits.forEach(async (commit, index) => {
+        let isMatched = false;
+        if (commit.comment === rollOut) {
+            let commitId = commit.commitId;
+            const changedFiles = await getAllFile(commitId);
+            let secondSlashIndex = changedFiles[1].item.path.indexOf('/', changedFiles[1].item.path.indexOf('/') + 1);
+            mainDir = changedFiles[1].item.path.substring(1, secondSlashIndex);
+
+            let envPath = '';
+            let environment = 'QA Server';
+            if (envId == 2) {
+                envPath = 'Prod\\';
+                environment = 'Production';
+            }
+            let path = 'hotfixes/' + rollOut + '/UNINSTALL_' + rollOut;
+            let serverPath = envPath + mainDir + '\\hotfixes\\' + rollOut + '\\UNINSTALL_' + rollOut;
+
+            fs.readdir(path, async (err, files) => {
+                if (err) {
+                    res.json("The rollout name does not exists at " + environment + ".");
+                }
+                else {
+                    let resp = await executeUninstall({req, serverPath, siteId, envId, environment, commitId, branch, rollOut});
+                    res.json(resp);
+                }
+            })
+            isMatched = true;
         }
         else {
-            let resp = await executeUninstall(req, serverPath, siteId, envId, connectionString, environment, shaKey, branch, rollOut);
-            res.json(resp);
+            if (allCommits.length === index + 1 && isMatched) {
+                res.json('The rollout name is not valid or not matched with Repository!');
+            }
         }
-    })
-
+    });
 }
 async function productionRollout(req, res) {
     let siteId = req.body.siteId;
     let envId = req.body.envId;
-    let rolloutName = req.body.rollout;
-    let path = 'hotfixes/' + rolloutName;
-    let serverPath = 'Prod\\LES\\hotfixes\\' + rolloutName;
+    let rollOut = req.body.rollout;
+    let path = 'hotfixes/' + rollOut;
+    let serverPath = '\\hotfixes\\' + rollOut;
+    let mainDir = 'LES';
+    if (rollOut.includes('REFS')) {
+        mainDir = 'RPWEB';
+    }
+
     fs.readdir(path, (err, files) => {
         if (err) {
             res.json('The rollout name does not exists at QA Server.');
         }
         else {
-            let resp = deployScript(req, path, serverPath, siteId, envId, rolloutName, connectionString, 'ins');
+            deployScript({req, path, mainDir, serverPath, siteId, envId, rollOut});
             res.json('The rollout has been deployed successfully.');
         }
     })
 
 }
-module.exports = { getBranchesLists, getAllCommits, getAllFiles, createRollout,deployToProduction, getEnvBySite, rolloutScript, uninstallRollout, productionRollout }
+module.exports = { getBranchesLists, getAllCommits, getAllFiles, createRollout, rolloutDeployment, getEnvBySite, rolloutScript, uninstallRollout, productionRollout }

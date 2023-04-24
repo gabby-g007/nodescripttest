@@ -1,14 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const middlewares = require('./middlewares');
-const router = require('./routes/index');
+const router = require('./routes/route');
 const flash = require('connect-flash');
-var session = require('express-session');
-var bodyParser = require('body-parser');
+let session = require('express-session');
+let bodyParser = require('body-parser');
 
 require('dotenv').config();
 
-var cookieParser = require('cookie-parser')
+let cookieParser = require('cookie-parser')
     // express-toastr
     , toastr = require('express-toastr');
 

@@ -1,4 +1,4 @@
-var fs = require('fs');
+let fs = require('fs');
 
 async function createNewFile(path, content, fileName) {
     let msg = '';
@@ -36,11 +36,9 @@ function createSubFolders(fileName, path) {
     });
 }
 function createFile(path, fileName, content) {
-    let msg = '';
     //appendFile function with filename, content and callback function
     fs.writeFile(path + '/' + fileName, content, async function (err) {
         if (err) return err;
-        msg = 'File is created successfully.';
     });
 
 }

@@ -46,7 +46,7 @@
           <div class="col">
             <select class="form-control site" name="site" id="site" required>
               <option value="">Select Site</option>
-              <% for(var i=0; i < siteList.length; i++) { %>
+              <% for(let i=0; i < siteList.length; i++) { %>
                 <option value='<%= siteList[i].id %>'>
                   <%= siteList[i].name %>
                 </option>
