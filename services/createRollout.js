@@ -6,7 +6,7 @@ const { getItemContent, resetCommit } = require('./wmsService');
 let fs = require('fs');
 let nodemailer = require('nodemailer');
 require('dotenv').config();
-const queryPromise = require('../config');
+const {queryPromise} = require('../config');
 const LESDIR = process.env.LESDIR;
 const REFSDIR = process.env.REFSDIR;
 

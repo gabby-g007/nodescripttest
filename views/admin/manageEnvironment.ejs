@@ -1,0 +1,64 @@
+<head>
+    <%- include('../partials/head'); %>
+</head>
+<header>
+    <%- include('../partials/adminHeader'); %>
+</header>
+
+<div class="container">
+    <div class="row">
+        <h2>Manage Environment</h2>
+        <div class="col-4 login">
+            <form onsubmit="createEnvironment()">
+                <div class="row">
+                    <div class="col form-group">
+                        <input type="text" class="form-control" name="envid" id="envid"
+                            style="visibility: hidden;width: 20px;">
+                        <input type="text" class="form-control" maxlength="100" placeholder="Environment Name"
+                            name="envname" id="envname" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col form-group">
+                        <div class="d-grid gap-2">
+                            <input type="submit" class="btn btn-info" value="Submit" id="btnSubmit">
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="col">
+            <table class="table table-bordered">
+                <tr>
+                    <th>Sr.No.</th>
+                    <th>Environment Name</th>
+                    <th>Edit</th>
+                    <th>Delete</th>
+                </tr>
+                <% for(let i=0; i < environmentList.length; i++) { %>
+                    <tr>
+                        <td>
+                            <%= i + 1 %>
+                        </td>
+                        <td>
+                            <%= environmentList[i].envName %>
+                        </td>
+                        <td>
+                            <a href="#"
+                                onclick="editEnvironment('<%= environmentList[i].envId %>', '<%= environmentList[i].envName %>')"><i
+                                    class="fa fa-edit fa-2x"></i></a>
+                        </td>
+                        <td>
+                            <a href="#" onclick="deleteEnvironment('<%= environmentList[i].envId %>')"><i
+                                    class="fa fa-trash fa-2x"></i></a>
+                        </td>
+                    </tr>
+                    <%}%>
+
+            </table>
+        </div>
+    </div>
+</div>
+<footer>
+    <%- include('../partials/footer'); %>
+</footer>

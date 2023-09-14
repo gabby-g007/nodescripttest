@@ -23,6 +23,7 @@
         const enviromentHTML = data.map(env => `<option value='${env.id}'>${env.name}</option>`).join();
         envList.innerHTML += enviromentHTML;
         if (!enviromentHTML) {
+            envList.innerHTML ='<option value="">Select Environment</option>';
             alert("Environments are not set with respect to selected site!")
         }
     }

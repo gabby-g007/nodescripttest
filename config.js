@@ -15,5 +15,6 @@ const queryPromise = (siteId, envId) => {
     });
 };
 
-module.exports = queryPromise
+module.exports = { queryPromise, secretKey: "APPWRK IT Solution",
+algorithm: 'HS256'};
 

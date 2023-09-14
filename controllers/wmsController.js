@@ -10,8 +10,9 @@ let shaKey = '';
 let rollOut = '';
 let mainDir = 'LES';
 async function getBranchesLists(req, res) {
-    const branchList = await getBranchesList();
-    res.render('pages/home', { response: branchList, req: req });
+    //const branchList = await getBranchesList();
+    //res.render('pages/home', { response: branchList, req: req });
+    res.render("admin/login");
 }
 async function getAllCommits(req, res) {
     let branch = req.query.branch;

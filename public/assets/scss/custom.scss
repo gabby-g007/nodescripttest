@@ -19,7 +19,7 @@
 }
 
 .bg-color {
-  background-color: #333;
+  background-color: #9a0e0e;
 }
 
 .wizard .nav-tabs {
@@ -240,4 +240,15 @@ input[type="checkbox"]:checked::before {
   .wizard .nav-tabs > li a i {
     display: none;
   }
+}
+.form-group
+{
+  margin-bottom: 1rem;
+}
+.login
+{
+  padding: 1rem 2rem;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  box-shadow: 0px 0px 20px 5px #ddd;
 }
